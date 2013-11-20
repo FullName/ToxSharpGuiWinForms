@@ -7,6 +7,26 @@ using ToxSharpBasic;
 
 namespace ToxSharpWinForms
 {
+	public class ToxSharpWinForms : Interfaces.IUIFactory
+	{
+		protected ToxSharpWinFormsMain wnd;
+
+		public ToxSharpWinForms()
+		{
+		}
+
+		public Interfaces.IUIReactions Create()
+		{
+			wnd = new ToxSharpWinFormsMain();
+			return wnd;
+		}
+
+		public void Quit()
+		{
+			WinForms.Application.Exit();
+		}
+	}
+
 	public class ToxSharpWinFormsMain : WinForms.Form, Interfaces.IUIReactions
 	{
 		// Interfaces.IUIReactions
@@ -280,6 +300,8 @@ namespace ToxSharpWinForms
 
 			// TODO: Focus => tb
 			input.Select();
+
+			System.Console.WriteLine("Window created, handle: " + Handle.ToInt64());
 		}
 
 		void TreeViewKeyUp (object sender, WinForms.KeyEventArgs e)
