@@ -300,8 +300,6 @@ namespace ToxSharpWinForms
 
 			// TODO: Focus => tb
 			input.Select();
-
-			System.Console.WriteLine("Window created, handle: " + Handle.ToInt64());
 		}
 
 		void TreeViewKeyUp (object sender, WinForms.KeyEventArgs e)
