@@ -330,14 +330,18 @@ namespace ToxSharpWinForms
 			this.uiactions = uiactions;
 		}
 
-		public void Run()
+		public void Run(string uistate)
 		{
+			// TODO: parse uistate for window position
 			WinForms.Application.Run(this);
 		}
 
 		void ClosedHandler(object sender, EventArgs e)
 		{
-			uiactions.QuitPrepare();
+			string uistate = "";
+			uistate += "WINDOW=" + Location.X + ";" + Location.Y + ";" + Width + ";" + Height + "\n";
+
+			uiactions.QuitPrepare(uistate);
 			WinForms.Application.Exit();
 		}
 
