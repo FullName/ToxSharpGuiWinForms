@@ -44,10 +44,29 @@ namespace ToxSharpWinForms
 
 		public void TreeAddSub(TypeIDTreeNode typeid, TypeIDTreeNode parenttypeid)
 		{
+			HolderTreeNode grandparent = TreeParent(parenttypeid);
+			if (grandparent != null)
+			{
+				foreach(WinForms.TreeNode wfparent in grandparent.Nodes)
+				{
+					HolderTreeNode parent = wfparent as HolderTreeNode;
+					if (parent.typeid == parenttypeid)
+					{
+						parent.Nodes.Add(new HolderTreeNode(typeid));
+						parent.Expand();
+						grandparent.Expand();
+						break;
+					}
+				}
+
+				TreeUpdateSub(typeid, parenttypeid);
+			}
 		}
+
 		public void TreeDelSub(TypeIDTreeNode typeid, TypeIDTreeNode parenttypeid)
 		{
 		}
+
 		public void TreeUpdateSub(TypeIDTreeNode typeid, TypeIDTreeNode parenttypeid)
 		{
 		}
@@ -58,6 +77,7 @@ namespace ToxSharpWinForms
 			if (parent != null)
 			{
 				parent.Nodes.Add(new HolderTreeNode(typeid));
+				uiactions.PrintDebug("Adding treenode: " + typeid.entryType + "." + typeid.ids());
 				parent.Expand();
 				TreeUpdate(typeid);
 			}
@@ -136,6 +156,12 @@ namespace ToxSharpWinForms
 			WinForms.ListView output = main.Controls[0] as WinForms.ListView;
 			WinForms.ListViewItem item = output.Items.Add(source);
 			item.SubItems.Add(text);
+
+			object[] olist = new object[3];
+			olist[0] = type;
+			olist[1] = id;
+			olist[2] = DateTime.Now;
+			item.Tag = olist;
 			output.EnsureVisible(item.Index);
 
 			if ((type == Interfaces.SourceType.Friend) ||
@@ -422,6 +448,40 @@ namespace ToxSharpWinForms
 				TabbedPage tabbedpage = new TabbedPage(pages, input, type, id, title);
 				pages.Controls.Add(tabbedpage);
 				pages.SelectedTab = tabbedpage;
+
+				try
+				{
+					WinForms.ListView output = tabbedpage.Controls[0] as WinForms.ListView;
+
+					TabbedPage tabbedpage0 = pages.TabPages[0] as TabbedPage;
+					WinForms.ListView output0 = tabbedpage0.Controls[0] as WinForms.ListView;
+					for(int i = 0; i < output0.Items.Count; i++)
+					{
+						try
+						{
+							WinForms.ListViewItem item0 = output0.Items[i];
+							object[] olist = item0.Tag as object[];
+							Interfaces.SourceType type0 = (Interfaces.SourceType)olist[0];
+							UInt16 id0 = (UInt16)olist[1];
+							if ((type0 == type) && (id0 == id))
+							{
+								string source = item0.Text;
+								string text = item0.SubItems[0].Text;
+								WinForms.ListViewItem item = output.Items.Add(source);
+								item.SubItems.Add(text);
+								item.Tag = item0.Tag;
+							}
+						}
+						catch (Exception e)
+						{
+							System.Console.WriteLine("PageAdd::Internal::CopyItem: " + e.Message);
+						}
+					}
+				}
+				catch (Exception e)
+				{
+					System.Console.WriteLine("PageAdd::Internal::CopyItems: " + e.Message);
+				}
 			}
 		}
 
@@ -484,7 +544,7 @@ namespace ToxSharpWinForms
 			}
 
 			dbgmsg += click.ToString();
-			// TextAdd(Interfaces.SourceType.Debug, 0, "DEBUG", dbgmsg);
+			TextAdd(Interfaces.SourceType.Debug, 0, "DEBUG", dbgmsg);
 
 			if (typeid == null)
 				uiactions.TreePopup(this, Location, typeid, button, click);
