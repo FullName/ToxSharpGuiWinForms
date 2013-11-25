@@ -30,11 +30,28 @@ namespace ToxSharpWinForms
 	public class ToxSharpWinFormsMain : WinForms.Form, Interfaces.IUIReactions
 	{
 		// Interfaces.IUIReactions
-		public void ConnectState(bool state, string text)
+		public void ToxDo(Interfaces.CallToxDo calltoxdo, IntPtr tox)
+		{
+			Invoke(calltoxdo, tox);
+		}
+
+		internal delegate void ConnectStateDelegate(bool state, string text);
+
+		internal void ConnectStateInvokee(bool state, string text)
 		{
 			connectstate.Checked = state;
 			connectstate.Text = text;
 		}
+
+		public void ConnectState(bool state, string text)
+		{
+			ConnectStateDelegate connectstate = new ConnectStateDelegate(ConnectStateInvokee);
+			Invoke(connectstate, state, text);
+		}
+
+	/************************************************************************/
+	/************************************************************************/
+	/************************************************************************/
 
 		public void TitleUpdate(string name, string ID)
 		{
