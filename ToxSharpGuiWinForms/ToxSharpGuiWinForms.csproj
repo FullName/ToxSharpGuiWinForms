@@ -49,6 +49,8 @@
     <CustomCommands>
       <CustomCommands>
         <Command type="AfterBuild" command="cp ${TargetFile} ../ToxSharpGuiRunAny/" workingdir="${SolutionDir}" />
+        <Command type="Execute" command="../ToxSharpGuiRunAny/ToxSharpGui.exe -v --gui=winforms" workingdir="${SolutionDir}" />
+        <Command type="AfterBuild" command="cp ${TargetFile}.mdb ../ToxSharpGuiRunAny/" workingdir="${SolutionDir}" />
       </CustomCommands>
     </CustomCommands>
   </PropertyGroup>
@@ -67,6 +69,7 @@
     </Reference>
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.cs" />

@@ -32,7 +32,10 @@ namespace ToxSharpWinForms
 		// Interfaces.IUIReactions
 		public void ToxDo(Interfaces.CallToxDo calltoxdo, IntPtr tox)
 		{
-			Invoke(calltoxdo, tox);
+			if (IsHandleCreated)
+				Invoke(calltoxdo, tox);
+			else
+				calltoxdo(tox);
 		}
 
 		internal delegate void ConnectStateDelegate(bool state, string text);
@@ -46,7 +49,10 @@ namespace ToxSharpWinForms
 		public void ConnectState(bool state, string text)
 		{
 			ConnectStateDelegate connectstate = new ConnectStateDelegate(ConnectStateInvokee);
-			Invoke(connectstate, state, text);
+			if (IsHandleCreated)
+				Invoke(connectstate, state, text);
+			else
+				connectstate(state, text);
 		}
 
 	/************************************************************************/
@@ -82,10 +88,75 @@ namespace ToxSharpWinForms
 
 		public void TreeDelSub(TypeIDTreeNode typeid, TypeIDTreeNode parenttypeid)
 		{
+			HolderTreeNode grandparent = TreeParent(parenttypeid);
+			if (grandparent != null)
+			{
+				foreach(WinForms.TreeNode wfparent in grandparent.Nodes)
+				{
+					HolderTreeNode parent = wfparent as HolderTreeNode;
+					if (parent.typeid == parenttypeid)
+					{
+						foreach(WinForms.TreeNode wfcandidate in parent.Nodes)
+						{
+							HolderTreeNode candidate = wfcandidate as HolderTreeNode;
+							if (candidate.typeid == typeid)
+							{
+								parent.Nodes.Remove(candidate);
+								break;
+							}
+						}
+
+						break;
+					}
+				}
+
+				TreeUpdateSub(typeid, parenttypeid);
+			}
 		}
 
 		public void TreeUpdateSub(TypeIDTreeNode typeid, TypeIDTreeNode parenttypeid)
 		{
+			if (parenttypeid == null)
+				return;
+
+			if (typeid != null)
+			{
+				HolderTreeNode grandparent = TreeParent(parenttypeid);
+				foreach(HolderTreeNode parent in grandparent.Nodes)
+					if (parent.typeid == parenttypeid)
+					{
+						foreach(HolderTreeNode child in parent.Nodes)
+							if (child.typeid == typeid)
+							{
+								child.Text = child.typeid.Text();
+								if ((typeid.entryType == TypeIDTreeNode.EntryType.Friend) && (child.Text == ""))
+									child.Text = "(no name)";
+								child.ToolTipText = child.typeid.TooltipText();
+								break;
+							}
+
+						break;
+					}
+			}
+			else
+			{
+				HolderTreeNode grandparent = TreeParent(parenttypeid);
+				foreach(HolderTreeNode parent in grandparent.Nodes)
+					if (parent.typeid == parenttypeid)
+					{
+						foreach(HolderTreeNode child in parent.Nodes)
+						{
+							child.Text = child.typeid.Text();
+							if ((child.typeid.entryType == TypeIDTreeNode.EntryType.Friend) && (child.Text == ""))
+								child.Text = "(no name)";
+							child.ToolTipText = child.typeid.TooltipText();
+						}
+
+						break;
+					}
+			}
+
+			people.Refresh();
 		}
 
 		public void TreeAdd(TypeIDTreeNode typeid)
@@ -129,6 +200,8 @@ namespace ToxSharpWinForms
 					if (child.typeid == typeid)
 					{
 						child.Text = child.typeid.Text();
+						if ((child.typeid.entryType == TypeIDTreeNode.EntryType.Friend) && (child.Text == ""))
+							child.Text = "(no name)";
 						child.ToolTipText = child.typeid.TooltipText();
 					    break;
 					}
@@ -138,6 +211,8 @@ namespace ToxSharpWinForms
 					foreach(HolderTreeNode child in parent.Nodes)
 					{
 						child.Text = child.typeid.Text();
+						if ((child.typeid.entryType == TypeIDTreeNode.EntryType.Friend) && (child.Text == ""))
+							child.Text = "(no name)";
 						child.ToolTipText = child.typeid.TooltipText();
 					}
 
@@ -153,8 +228,19 @@ namespace ToxSharpWinForms
 		// right side: multi-tab
 		public bool CurrentTypeID(out Interfaces.SourceType type, out System.UInt32 id)
 		{
-			// TODO
-			type = Interfaces.SourceType.Debug;
+			if (pages.TabIndex > 0)
+			{
+				TabbedPage page = pages.SelectedTab as TabbedPage;
+				if (page != null)
+				{
+					UInt16 ids;
+					page.TypeID(out type, out ids);
+					id = ids;
+					return true;
+				}
+			}
+
+			type = Interfaces.SourceType.System;
 			id = 0;
 			return false;
 		}
@@ -276,6 +362,7 @@ namespace ToxSharpWinForms
 			ClosedHandler(null, null);
 		}
 
+		private WinForms.SplitContainer splitcontainer;
 
 		private WinForms.CheckBox connectstate;
 		private WinForms.TreeView people;
@@ -295,13 +382,23 @@ namespace ToxSharpWinForms
 
 			int RightWidth = WidthMin - LeftWidth;
 
+			splitcontainer = new WinForms.SplitContainer();
+			splitcontainer.Width = WidthMin;
+			splitcontainer.Height = HeightMin;
+			splitcontainer.Panel2.Resize += ResizeHandler;
+
+			Controls.Add(splitcontainer);
+
+
 			connectstate = new WinForms.CheckBox();
 			connectstate.Text = "Disconnected.";
 			connectstate.Enabled = false;
 
 			connectstate.Left = 5;
 			connectstate.Width = LeftWidth;
-			Controls.Add(connectstate);
+
+			splitcontainer.Panel1.Controls.Add(connectstate);
+
 
 			people = new WinForms.TreeView();
 			people.ShowNodeToolTips = true;
@@ -314,27 +411,33 @@ namespace ToxSharpWinForms
 			people.Top = connectstate.Bottom + 5;
 			people.Width = LeftWidth;
 			people.Height = HeightMin - connectstate.Height;
-			Controls.Add(people);
+
+			splitcontainer.Panel1.Controls.Add(people);
+
 
 			pages = new WinForms.TabControl();
 			pages.Alignment = WinForms.TabAlignment.Bottom;
+			pages.Deselecting += PageDeselecting;
+			pages.Selecting += PageSelecting;
+			pages.SelectedIndexChanged += ResizeHandler;
 
-			pages.Left = people.Right + 5;
+			pages.Left = 5;
 			pages.Top = 5;
 			pages.Width = RightWidth;
-			pages.Height = HeightMin - connectstate.Height;
+			pages.Height = HeightMin;
 
-			Controls.Add(pages);
+			splitcontainer.Panel2.Controls.Add(pages);
 
 			input = new WinForms.TextBox();
 			input.Multiline = false;
 			input.KeyPress += TextBoxKeyPressHandler;
 
-			input.Left = pages.Left;
+			input.Left = 5;
 			input.Width = RightWidth;
 			input.Top = pages.Bottom + 5;
-			input.Height = connectstate.Height;
-			Controls.Add(input);
+
+			splitcontainer.Panel2.Controls.Add(input);
+
 
 			PageAdd(null, "Main");
 
@@ -345,7 +448,7 @@ namespace ToxSharpWinForms
 			input.Select();
 		}
 
-		void TreeViewKeyUp (object sender, WinForms.KeyEventArgs e)
+		private void TreeViewKeyUp (object sender, WinForms.KeyEventArgs e)
 		{
 			if ((e.Modifiers == WinForms.Keys.None) &&
 			    (e.KeyData == WinForms.Keys.Return))
@@ -373,30 +476,112 @@ namespace ToxSharpWinForms
 			this.uiactions = uiactions;
 		}
 
+		protected int col1 = -1;
+		protected int col2 = -1;
+
+		private void PageDeselecting(object o, WinForms.TabControlCancelEventArgs e)
+		{
+			TabbedPage page = pages.SelectedTab as TabbedPage;
+			WinForms.ListView view = page.Controls[0] as WinForms.ListView;
+			col1 = view.Columns[0].Width;
+			col2 = view.Columns[1].Width;
+		}
+
+		private void PageSelecting(object o, WinForms.TabControlCancelEventArgs e)
+		{
+			TabbedPage page = pages.SelectedTab as TabbedPage;
+			WinForms.ListView view = page.Controls[0] as WinForms.ListView;
+			if (col1 > 0)
+				view.Columns[0].Width = col1;
+			if (col2 > 0)
+				view.Columns[1].Width = col2;
+		}
+
+		public struct UIData
+		{
+			public int x, y, w, h, spl, c1, c2;
+		}
+
 		public void Run(string uistate)
 		{
 			// TODO: parse uistate for window position
+			UIData uidata;
+			try
+			{
+				uidata = SerializeFromString<UIData>(uistate);
+
+				Show();
+
+				Location.X = uidata.x;
+				Location.Y = uidata.y;
+				Width = uidata.w;
+				Height = uidata.h;
+				splitcontainer.SplitterDistance = uidata.spl;
+				col1 = uidata.c1;
+				col2 = uidata.c2;
+
+
+				ResizeHandler(null, null);
+			}
+			catch
+			{
+			}
+
 			WinForms.Application.Run(this);
 		}
 
-		void ClosedHandler(object sender, EventArgs e)
+		internal static string SerializeToString(object obj)
 		{
-			string uistate = "";
-			uistate += "WINDOW=" + Location.X + ";" + Location.Y + ";" + Width + ";" + Height + "\n";
+			System.Xml.Serialization.XmlSerializer serializer = new System.Xml.Serialization.XmlSerializer(obj.GetType());
+			using (System.IO.StringWriter writer = new System.IO.StringWriter())
+			{
+				serializer.Serialize(writer, obj);
+				return writer.ToString();
+			}
+		}
 
+		internal static T SerializeFromString<T>(string xml)
+		{
+			System.Xml.Serialization.XmlSerializer serializer = new System.Xml.Serialization.XmlSerializer(typeof(T));
+
+			using (System.IO.StringReader reader = new System.IO.StringReader(xml))
+			{
+				return (T)serializer.Deserialize(reader);
+			}
+		}
+
+		private void ClosedHandler(object sender, EventArgs e)
+		{
+			if ((col1 == -1) || (col2 == -1))
+				PageDeselecting(null, null);
+
+			UIData uidata;
+			uidata.x = Location.X;
+			uidata.y = Location.Y;
+			uidata.w = splitcontainer.Width;
+			uidata.h = Height;
+			uidata.spl = splitcontainer.SplitterDistance;
+			uidata.c1 = col1;
+			uidata.c2 = col2;
+
+			string uistate = SerializeToString(uidata);
 			uiactions.QuitPrepare(uistate);
 			WinForms.Application.Exit();
 		}
 
 		private void ResizeHandler(object sender, EventArgs e)
 		{
-			int HeightNow = Height - 40;
+			int HeightNow = Height - 48;
+			splitcontainer.Height = HeightNow;
+			splitcontainer.Width = Width - 25;
+
 			people.Height = HeightNow - connectstate.Height;
-			pages.Height  = people.Height;
+			pages.Height  = HeightNow - (input.Height + 12);
 			input.Top     = pages.Bottom + 5;
 
-			pages.Width = Width - 25 - LeftWidth;
-			input.Width = pages.Width;
+			people.Width = splitcontainer.Panel1.Width - 5;
+			pages.Width = splitcontainer.Panel2.Width - 5;
+			input.Width = splitcontainer.Panel2.Width - 5;
 
 			PageUpdate();
 		}
@@ -406,7 +591,7 @@ namespace ToxSharpWinForms
 			protected Interfaces.SourceType type;
 			protected UInt16 id;
 
-			protected TabbedPage(WinForms.TabControl pages, WinForms.TextBox input, Interfaces.SourceType type, UInt16 id, string title) : base(title)
+			protected TabbedPage(WinForms.TabControl pages, WinForms.TextBox input, Interfaces.SourceType type, UInt16 id, string title, int col1, int col2) : base(title)
 			{
 				this.type = type;
 				this.id = id;
@@ -416,8 +601,8 @@ namespace ToxSharpWinForms
 				WinForms.ListView output = new WinForms.ListView();
 				output.View = WinForms.View.Details;
 				output.Scrollable = true;
-				output.Columns.Add("Source", 60);
-				output.Columns.Add("Text", RightWidth - 24 - 60);
+				output.Columns.Add("Source", col1 > 0 ? col1 : 60);
+				output.Columns.Add("Text", col2 > 0 ? col2 : RightWidth - 24 - 60);
 				output.HeaderStyle = WinForms.ColumnHeaderStyle.Nonclickable;
 
 				output.Width = RightWidth;
@@ -431,8 +616,13 @@ namespace ToxSharpWinForms
 				return ((this.type == type) && (this.id == id));
 			}
 
+			public void TypeID(out Interfaces.SourceType type, out UInt16 id)
+			{
+				type = this.type;
+				id = this.id;
+			}
 
-			public static void PageAdd(WinForms.TabControl pages, WinForms.TextBox input, TypeIDTreeNode typeid, string title)
+			public static void PageAdd(WinForms.TabControl pages, WinForms.TextBox input, TypeIDTreeNode typeid, string title, int col1, int col2)
 			{
 				Interfaces.SourceType type = Interfaces.SourceType.System;
 				UInt16 id = 0;
@@ -462,7 +652,7 @@ namespace ToxSharpWinForms
 					id = typeid.ids();
 				}
 
-				TabbedPage tabbedpage = new TabbedPage(pages, input, type, id, title);
+				TabbedPage tabbedpage = new TabbedPage(pages, input, type, id, title, col1, col2);
 				pages.Controls.Add(tabbedpage);
 				pages.SelectedTab = tabbedpage;
 
@@ -483,7 +673,7 @@ namespace ToxSharpWinForms
 							if ((type0 == type) && (id0 == id))
 							{
 								string source = item0.Text;
-								string text = item0.SubItems[0].Text;
+								string text = item0.SubItems[1].Text;
 								WinForms.ListViewItem item = output.Items.Add(source);
 								item.SubItems.Add(text);
 								item.Tag = item0.Tag;
@@ -509,15 +699,16 @@ namespace ToxSharpWinForms
 			        (typeid.entryType != TypeIDTreeNode.EntryType.Group))
 					return;
 
-			TabbedPage.PageAdd(pages, input, typeid, title);
+			TabbedPage.PageAdd(pages, input, typeid, title, col1, col2);
 		}
 
 		protected void PageUpdate()
 		{
 			WinForms.TabPage page = pages.SelectedTab;
+
 			WinForms.ListView output = page.Controls[0] as WinForms.ListView;
 			output.Width = pages.Width;
-			output.Height = pages.Height - 28;
+			output.Height = pages.Height - 24;
 		}
 
 		void TreeViewMouseUp(object sender, WinForms.MouseEventArgs e)
@@ -637,6 +828,8 @@ namespace ToxSharpWinForms
 			HeaderTreeNode header = new HeaderTreeNode(typeid.entryType);
 			HolderTreeNode holder = new HolderTreeNode(header);
 			holder.Text = header.Text();
+			if ((typeid.entryType == TypeIDTreeNode.EntryType.Friend) && (holder.Text == ""))
+				holder.Text = "(no name)";
 			holder.ToolTipText = header.TooltipText();
 			headers[id] = holder;
 
